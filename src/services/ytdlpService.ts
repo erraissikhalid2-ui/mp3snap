@@ -147,13 +147,25 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
     ));
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+
+    // Log full error internally — never expose raw command output to client
+    console.error("[ytdlp] getVideoInfo failed:", message);
+
     if (message.includes("Private video"))
-      throw new VideoUnavailableError("This video is private.");
-    if (message.includes("This video is not available"))
-      throw new VideoUnavailableError("Video not available in your region.");
-    if (message.includes("Unable to extract"))
-      throw new InvalidUrlError("Could not extract video info – check the URL.");
-    throw new VideoUnavailableError("yt-dlp error: " + message);
+      throw new VideoUnavailableError("This video is private and cannot be accessed.");
+    if (message.includes("not available in your country") || message.includes("not made this video available"))
+      throw new VideoUnavailableError("This video is not available in our server region. Try a different video.");
+    if (message.includes("This video is not available") || message.includes("Video unavailable"))
+      throw new VideoUnavailableError("This video is unavailable.");
+    if (message.includes("Unable to extract") || message.includes("Could not extract"))
+      throw new InvalidUrlError("Could not read this URL. Make sure it is a valid YouTube link.");
+    if (message.includes("Sign in") || message.includes("age-restricted"))
+      throw new VideoUnavailableError("This video requires sign-in or is age-restricted.");
+    if (message.includes("timed out") || message.includes("ETIMEDOUT"))
+      throw new VideoUnavailableError("Request timed out. Please try again.");
+
+    // Generic fallback — safe message only, no internal details
+    throw new VideoUnavailableError("Could not process this video. Please try a different link.");
   }
 
   const raw: RawYtdlpInfo = JSON.parse(stdout);
